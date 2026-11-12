@@ -409,6 +409,30 @@ final class WorkspaceSwipePresentationTests: XCTestCase {
         XCTAssertTrue(refresh.affectedWorkspaceIds.isSuperset(of: [source, next.id]))
     }
 
+    func testFollowingAMovedWindowSlidesItInWithItsNewWorkspace() async throws {
+        let fixture = try previewFixture()
+        defer { fixture.swipe.cancel(reason: "test") }
+        try await cachePreviewThroughContact(fixture)
+        let controller = fixture.controller
+        controller.settings.focus.followsWindowToMonitor = true
+        let manager = controller.workspaceManager
+        let source = try XCTUnwrap(manager.activeWorkspace(on: fixture.monitor.id)?.id)
+        let destination = try XCTUnwrap(manager.nextWorkspaceInOrder(
+            on: fixture.monitor.id, from: source, wrapAround: false
+        )).id
+        let navigation = controller.workspaceNavigationHandler
+
+        guard case let .changed(mutation) = navigation.moveWindow(handle: fixture.handle, toWorkspaceId: destination)
+        else { return XCTFail("Expected the window to move") }
+        navigation.finishWorkspaceMove(mutation)
+
+        let flight = try XCTUnwrap(fixture.swipe.flights[fixture.monitor.id])
+        XCTAssertEqual(manager.activeWorkspace(on: fixture.monitor.id)?.id, destination)
+        XCTAssertEqual(flight.destination.id, destination)
+        XCTAssertEqual(flight.destination.items.map(\.handle.id), [fixture.handle.id])
+        XCTAssertTrue(flight.preparation.source.items.isEmpty)
+    }
+
     func testKeyboardSwitchDoesNothingWithAnimationsOff() throws {
         let (controller, swipe, monitor, source) = try fixture()
         controller.motionPolicy.animationsEnabled = false
