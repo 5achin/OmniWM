@@ -393,6 +393,22 @@ final class WorkspaceSwipePresentationTests: XCTestCase {
         XCTAssertFalse(swipe.hasPresentation)
     }
 
+    func testFollowingAMovedWindowRelayoutsBothWorkspacesOfTheMove() throws {
+        let (controller, swipe, monitor, source) = try fixture()
+        let next = try XCTUnwrap(controller.workspaceManager.nextWorkspaceInOrder(
+            on: monitor.id, from: source, wrapAround: true
+        ))
+
+        XCTAssertTrue(swipe.animateSwitch(
+            to: next.id, on: monitor.id, isNext: nil, affectedWorkspaces: [source, next.id]
+        ))
+
+        XCTAssertEqual(controller.workspaceManager.activeWorkspace(on: monitor.id)?.id, next.id)
+        let layoutState = controller.layoutRefreshController.layoutState
+        let refresh = try XCTUnwrap(layoutState.pendingRefresh ?? layoutState.activeRefresh)
+        XCTAssertTrue(refresh.affectedWorkspaceIds.isSuperset(of: [source, next.id]))
+    }
+
     func testKeyboardSwitchDoesNothingWithAnimationsOff() throws {
         let (controller, swipe, monitor, source) = try fixture()
         controller.motionPolicy.animationsEnabled = false

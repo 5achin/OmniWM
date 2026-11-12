@@ -24,6 +24,9 @@ extension WorkspaceNavigationHandler {
             )
             return
         }
+        if followsMove(focusPolicy, controller: controller), animateFollow(mutation, controller: controller) {
+            return
+        }
 
         let completion = workspaceMoveFocusCompletion(
             mutation,
@@ -125,6 +128,24 @@ extension WorkspaceNavigationHandler {
         return state
     }
 
+    private func followsMove(_ focusPolicy: WorkspaceMoveFocusPolicy, controller: WMController) -> Bool {
+        focusPolicy == .alwaysFollow || controller.settings.focus.followsWindowToMonitor
+    }
+
+    private func animateFollow(_ mutation: StructuralMutation, controller: WMController) -> Bool {
+        let manager = controller.workspaceManager
+        guard let monitorId = manager.monitorId(for: mutation.sourceWorkspaceId),
+              manager.monitorId(for: mutation.destinationWorkspaceId) == monitorId,
+              manager.activeWorkspaceOrFirst(on: monitorId)?.id == mutation.sourceWorkspaceId
+        else { return false }
+        controller.isTransferringWindow = true
+        defer { controller.isTransferringWindow = false }
+        return controller.layoutRefreshController.workspaceSwipe.animateSwitch(
+            to: mutation.destinationWorkspaceId, on: monitorId, isNext: nil,
+            affectedWorkspaces: mutation.affectedWorkspaceIds
+        )
+    }
+
     private struct WorkspaceMoveFocusCompletion {
         let gateWorkspaceIds: Set<WorkspaceDescriptor.ID>
         let postLayout: LayoutRefreshController.PostLayoutAction
@@ -140,7 +161,7 @@ extension WorkspaceNavigationHandler {
         let destinationWorkspaceId = mutation.destinationWorkspaceId
         let gateWorkspaceIds: Set<WorkspaceDescriptor.ID>
         let postLayout: LayoutRefreshController.PostLayoutAction
-        if focusPolicy == .alwaysFollow || controller.settings.focus.followsWindowToMonitor {
+        if followsMove(focusPolicy, controller: controller) {
             controller.isTransferringWindow = true
             defer { controller.isTransferringWindow = false }
 

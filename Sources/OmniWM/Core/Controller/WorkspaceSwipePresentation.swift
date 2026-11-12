@@ -353,11 +353,10 @@ extension WorkspaceSwipePresentation {
         flight.settlement?.seal()
     }
 
-    func commit(_ flight: Flight) {
+    func commit(_ flight: Flight, affectedWorkspaces: Set<WorkspaceDescriptor.ID> = []) {
         let monitor = flight.preparation.monitor
         guard let controller, let refreshController,
-              controller.workspaceManager.activeWorkspaceOrFirst(on: monitor.id)?.id
-              == flight.preparation.source.id
+              controller.workspaceManager.activeWorkspaceOrFirst(on: monitor.id)?.id == flight.preparation.source.id
         else {
             cancel(flight, reason: "superseded")
             return
@@ -391,12 +390,14 @@ extension WorkspaceSwipePresentation {
             focusOwed = false
             controller.workspaceNavigationHandler.commitWorkspaceTransitionFocusHandoff(
                 targetWorkspaceId: flight.destination.id, monitor: monitor, startScrollAnimation: false,
+                affectedWorkspaces: affectedWorkspaces,
                 placementSubmitted: placementSubmitted, placementInvalidated: placementInvalidated
             )
         } else {
             focusOwed = flights.values.contains { $0.serial > flight.serial }
             refreshController.stopScrollAnimation(for: monitor.displayId)
             refreshController.commitWorkspaceTransition(
+                affectedWorkspaces: affectedWorkspaces,
                 postLayout: placementSubmitted, postLayoutInvalidated: placementInvalidated
             )
             if !focusOwed { keepFocusOffHiddenWorkspace(flight.preparation.source.id) }

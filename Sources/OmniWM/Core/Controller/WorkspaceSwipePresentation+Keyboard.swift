@@ -12,7 +12,8 @@ extension WorkspaceSwipePresentation {
     func animateSwitch(
         to targetId: WorkspaceDescriptor.ID,
         on monitorId: Monitor.ID,
-        isNext explicitIsNext: Bool?
+        isNext explicitIsNext: Bool?,
+        affectedWorkspaces: Set<WorkspaceDescriptor.ID> = []
     ) -> Bool {
         guard let controller, canAnimateSwitch(to: targetId, on: monitorId),
               let monitor = controller.workspaceManager.monitor(byId: monitorId)
@@ -56,7 +57,7 @@ extension WorkspaceSwipePresentation {
             trace("keyboard-fallback-preview-unavailable")
             return false
         }
-        return launch(flight, after: predecessor, at: now)
+        return launch(flight, after: predecessor, at: now, affectedWorkspaces: affectedWorkspaces)
     }
 
     private func canAnimateSwitch(to targetId: WorkspaceDescriptor.ID, on monitorId: Monitor.ID) -> Bool {
@@ -76,7 +77,12 @@ extension WorkspaceSwipePresentation {
         return show(preview, for: flight)
     }
 
-    private func launch(_ flight: Flight, after predecessor: Flight?, at now: TimeInterval) -> Bool {
+    private func launch(
+        _ flight: Flight,
+        after predecessor: Flight?,
+        at now: TimeInterval,
+        affectedWorkspaces: Set<WorkspaceDescriptor.ID>
+    ) -> Bool {
         guard let controller else { return false }
         install(flight, after: predecessor, tracksGesture: false)
         flight.motion.animateToDestination(
@@ -89,7 +95,7 @@ extension WorkspaceSwipePresentation {
         }
         controller.surfaceReconciler.reconcileNow()
         present(flight, at: now)
-        commit(flight)
+        commit(flight, affectedWorkspaces: affectedWorkspaces)
         guard isCurrent(flight), flight.committing else { return false }
         prefetchChainTargets(after: flight)
         return true
