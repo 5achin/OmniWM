@@ -390,7 +390,7 @@ extension WorkspaceSwipePresentation {
             focusOwed = false
             controller.workspaceNavigationHandler.commitWorkspaceTransitionFocusHandoff(
                 targetWorkspaceId: flight.destination.id, monitor: monitor, startScrollAnimation: false,
-                affectedWorkspaces: affectedWorkspaces,
+                affectedWorkspaces: affectedWorkspaces, focusing: flight.focusToken,
                 placementSubmitted: placementSubmitted, placementInvalidated: placementInvalidated
             )
         } else {

@@ -44,6 +44,7 @@ extension WorkspaceSwipePresentation {
         var isKeyboard = false
         var motionFinished = false
         var deferredFinishReason: String?
+        var focusToken: WindowToken?
 
         init(
             preparation: Preparation,

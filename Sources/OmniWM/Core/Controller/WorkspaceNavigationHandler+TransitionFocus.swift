@@ -49,11 +49,13 @@ extension WorkspaceNavigationHandler {
         monitor: Monitor?,
         startScrollAnimation: Bool,
         affectedWorkspaces: Set<WorkspaceDescriptor.ID> = [],
+        focusing focusToken: WindowToken? = nil,
         placementSubmitted: LayoutRefreshController.PostLayoutAction? = nil,
         placementInvalidated: LayoutRefreshController.PostLayoutAction? = nil
     ) {
         guard let controller else { return }
-        let handoff = resolveWorkspaceTransitionFocusHandoff(for: targetWorkspaceId)
+        let handoff = focusToken.map { WorkspaceTransitionFocusHandoff(focusToken: $0, shouldClearManagedFocus: false) }
+            ?? resolveWorkspaceTransitionFocusHandoff(for: targetWorkspaceId)
         if let monitor {
             controller.layoutRefreshController.stopScrollAnimation(for: monitor.displayId)
         }
@@ -73,6 +75,7 @@ extension WorkspaceNavigationHandler {
         controller.layoutRefreshController.commitWorkspaceTransition(
             affectedWorkspaces: affectedWorkspaces,
             reason: .workspaceTransition,
+            postLayoutGateWorkspaceIds: focusToken.map { _ in [targetWorkspaceId] },
             postLayout: {
                 handoffAction()
                 placementSubmitted?()

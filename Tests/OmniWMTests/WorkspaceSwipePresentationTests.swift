@@ -431,6 +431,49 @@ final class WorkspaceSwipePresentationTests: XCTestCase {
         XCTAssertEqual(flight.destination.id, destination)
         XCTAssertEqual(flight.destination.items.map(\.handle.id), [fixture.handle.id])
         XCTAssertTrue(flight.preparation.source.items.isEmpty)
+        XCTAssertEqual(flight.focusToken, fixture.handle.id)
+    }
+
+    func testTransitionFocusingAWindowOverridesTheDestinationsLastFocus() async throws {
+        let fixture = try previewFixture()
+        defer { fixture.swipe.cancel(reason: "test") }
+        try await cachePreviewThroughContact(fixture)
+        let controller = fixture.controller
+        controller.settings.focus.followsWindowToMonitor = true
+        let manager = controller.workspaceManager
+        let source = try XCTUnwrap(manager.activeWorkspace(on: fixture.monitor.id)?.id)
+        let destination = try XCTUnwrap(manager.nextWorkspaceInOrder(
+            on: fixture.monitor.id, from: source, wrapAround: false
+        )).id
+        let resident = manager.addWindow(
+            AXWindowRef(element: AXUIElementCreateApplication(764_951), windowId: 764_952),
+            pid: 764_951, windowId: 764_952, to: destination
+        )
+        manager.setCachedConstraints(.unconstrained, for: resident)
+        let engine = try XCTUnwrap(controller.niriEngine)
+        let residentNode = engine.addWindow(token: resident, to: destination, afterSelection: nil)
+        _ = manager.commitWorkspaceSelection(
+            nodeId: residentNode.id, focusedToken: resident, in: destination, onMonitor: fixture.monitor.id
+        )
+        _ = manager.rememberFocus(resident, in: destination)
+        let navigation = controller.workspaceNavigationHandler
+
+        guard case .changed = navigation.moveWindow(handle: fixture.handle, toWorkspaceId: destination)
+        else { return XCTFail("Expected the window to move") }
+        XCTAssertTrue(manager.setActiveWorkspace(destination, on: fixture.monitor.id))
+        navigation.commitWorkspaceTransitionFocusHandoff(
+            targetWorkspaceId: destination, monitor: fixture.monitor, startScrollAnimation: false,
+            focusing: fixture.handle.id
+        )
+        let refreshController = controller.layoutRefreshController
+        let refresh = try XCTUnwrap(refreshController.layoutState.activeRefresh)
+        refreshController.layoutState.activeRefreshTask?.cancel()
+        refreshController.layoutState.didExecuteEffectPlan = true
+        refreshController.finishRefresh(
+            refresh, didComplete: true, generation: refreshController.layoutState.refreshGeneration
+        )
+
+        XCTAssertEqual(controller.intentLedger.activeManagedRequest?.token, fixture.handle.id)
     }
 
     func testKeyboardSwitchDoesNothingWithAnimationsOff() throws {

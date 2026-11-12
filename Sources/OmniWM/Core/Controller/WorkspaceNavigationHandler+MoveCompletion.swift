@@ -142,7 +142,7 @@ extension WorkspaceNavigationHandler {
         defer { controller.isTransferringWindow = false }
         return controller.layoutRefreshController.workspaceSwipe.animateSwitch(
             to: mutation.destinationWorkspaceId, on: monitorId, isNext: nil,
-            affectedWorkspaces: mutation.affectedWorkspaceIds
+            affectedWorkspaces: mutation.affectedWorkspaceIds, focusing: mutation.selectedHandle.id
         )
     }
 

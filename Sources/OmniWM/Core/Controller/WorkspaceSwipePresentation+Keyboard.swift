@@ -13,7 +13,8 @@ extension WorkspaceSwipePresentation {
         to targetId: WorkspaceDescriptor.ID,
         on monitorId: Monitor.ID,
         isNext explicitIsNext: Bool?,
-        affectedWorkspaces: Set<WorkspaceDescriptor.ID> = []
+        affectedWorkspaces: Set<WorkspaceDescriptor.ID> = [],
+        focusing focusToken: WindowToken? = nil
     ) -> Bool {
         guard let controller, canAnimateSwitch(to: targetId, on: monitorId),
               let monitor = controller.workspaceManager.monitor(byId: monitorId)
@@ -57,6 +58,7 @@ extension WorkspaceSwipePresentation {
             trace("keyboard-fallback-preview-unavailable")
             return false
         }
+        flight.focusToken = focusToken
         return launch(flight, after: predecessor, at: now, affectedWorkspaces: affectedWorkspaces)
     }
 
