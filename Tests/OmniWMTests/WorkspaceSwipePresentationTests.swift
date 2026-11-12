@@ -406,6 +406,76 @@ final class WorkspaceSwipePresentationTests: XCTestCase {
         XCTAssertFalse(swipe.hasPresentation)
     }
 
+    func testActivatedWorkspaceSlidesInWithTheStifferSpringAndCommitsTheTransition() throws {
+        var mediaTime = 10.0
+        let (controller, swipe, monitor, source) = try fixture(mediaTimeProvider: { mediaTime })
+        let manager = controller.workspaceManager
+        let next = try XCTUnwrap(manager.nextWorkspaceInOrder(on: monitor.id, from: source, wrapAround: true))
+        XCTAssertTrue(manager.setActiveWorkspace(next.id, on: monitor.id))
+        var committed = 0
+
+        XCTAssertTrue(swipe.animateActivatedSwitch(from: source, to: next.id, on: monitor.id) { submitted, _ in
+            committed += 1
+            submitted()
+        })
+
+        XCTAssertEqual(committed, 1)
+        let flight = try XCTUnwrap(swipe.flights[monitor.id])
+        XCTAssertTrue(flight.isKeyboard)
+        XCTAssertEqual(flight.preparation.source.id, source)
+        XCTAssertEqual(flight.destination.id, next.id)
+
+        mediaTime = 10.05
+        swipe.tick(displayId: monitor.displayId, timestamp: mediaTime)
+        XCTAssertGreaterThan(flight.progress, 0)
+        XCTAssertTrue(swipe.hasPresentation)
+
+        swipe.tick(displayId: monitor.displayId, timestamp: 12)
+        XCTAssertFalse(swipe.hasPresentation)
+        XCTAssertEqual(manager.activeWorkspace(on: monitor.id)?.id, next.id)
+    }
+
+    func testActivationSlideIsFasterThanAKeyboardSwitch() throws {
+        var mediaTime = 10.0
+        let (keyboardController, keyboardSwipe, keyboardMonitor, keyboardSource) =
+            try fixture(mediaTimeProvider: { mediaTime })
+        let keyboardNext = try XCTUnwrap(keyboardController.workspaceManager.nextWorkspaceInOrder(
+            on: keyboardMonitor.id, from: keyboardSource, wrapAround: true
+        ))
+        XCTAssertTrue(keyboardSwipe.animateSwitch(to: keyboardNext.id, on: keyboardMonitor.id, isNext: true))
+        let (controller, swipe, monitor, source) = try fixture(mediaTimeProvider: { mediaTime })
+        let next = try XCTUnwrap(controller.workspaceManager.nextWorkspaceInOrder(
+            on: monitor.id, from: source, wrapAround: true
+        ))
+        XCTAssertTrue(controller.workspaceManager.setActiveWorkspace(next.id, on: monitor.id))
+        XCTAssertTrue(swipe.animateActivatedSwitch(from: source, to: next.id, on: monitor.id) { _, _ in })
+
+        mediaTime = 10.03
+        keyboardSwipe.tick(displayId: keyboardMonitor.displayId, timestamp: mediaTime)
+        swipe.tick(displayId: monitor.displayId, timestamp: mediaTime)
+
+        let keyboardProgress = try XCTUnwrap(keyboardSwipe.flights[keyboardMonitor.id]).progress
+        let activationProgress = try XCTUnwrap(swipe.flights[monitor.id]).progress
+        XCTAssertGreaterThan(activationProgress, keyboardProgress)
+    }
+
+    func testActivationWithAnimationsOffFallsBackToTheInstantTransition() throws {
+        let (controller, swipe, monitor, source) = try fixture()
+        controller.motionPolicy.animationsEnabled = false
+        let next = try XCTUnwrap(controller.workspaceManager.nextWorkspaceInOrder(
+            on: monitor.id, from: source, wrapAround: true
+        ))
+        XCTAssertTrue(controller.workspaceManager.setActiveWorkspace(next.id, on: monitor.id))
+        var committed = false
+
+        XCTAssertFalse(swipe.animateActivatedSwitch(from: source, to: next.id, on: monitor.id) { _, _ in
+            committed = true
+        })
+
+        XCTAssertFalse(committed)
+        XCTAssertFalse(swipe.hasPresentation)
+    }
+
     func testSwipeOnAnotherMonitorRunsAlongsideTheSettlingSwitch() throws {
         var mediaTime = 1.06
         let (controller, swipe, monitor, other, source, otherSource) = try twoMonitorFixture { mediaTime }

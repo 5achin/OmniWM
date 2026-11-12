@@ -19,6 +19,7 @@ extension AXEventHandler {
         let isWorkspaceActive: Bool
         let monitorId: Monitor.ID?
         let shouldActivateWorkspace: Bool
+        let previousWorkspaceId: WorkspaceDescriptor.ID?
         let isRetriedAuthoritativeSystemModalFocus: Bool
         let activeRequest: ManagedFocusRequest?
         let shouldConfirmRequest: Bool
@@ -133,6 +134,7 @@ extension AXEventHandler {
             isWorkspaceActive: isWorkspaceActive,
             monitorId: monitorId,
             shouldActivateWorkspace: shouldActivateWorkspace,
+            previousWorkspaceId: monitorId.flatMap { controller.workspaceManager.activeWorkspace(on: $0)?.id },
             isRetriedAuthoritativeSystemModalFocus: isRetriedAuthoritativeSystemModalFocus,
             activeRequest: activeRequest,
             shouldConfirmRequest: shouldConfirmRequest,
@@ -331,6 +333,23 @@ extension AXEventHandler {
         return .init(layoutRefresh: isWorkspaceActive, axFocus: false)
     }
 
+    private func animateActivatedWorkspaceSwitch(
+        _ observation: ManagedActivationObservation,
+        controller: WMController
+    ) -> Bool {
+        guard let monitorId = observation.monitorId, let sourceId = observation.previousWorkspaceId else {
+            return false
+        }
+        let refreshController = controller.layoutRefreshController
+        return refreshController.workspaceSwipe.animateActivatedSwitch(
+            from: sourceId, to: observation.entry.workspaceId, on: monitorId
+        ) { submitted, invalidated in
+            refreshController.commitWorkspaceTransition(
+                reason: .appActivationTransition, postLayout: submitted, postLayoutInvalidated: invalidated
+            )
+        }
+    }
+
     private func finishManagedActivation(
         _ observation: ManagedActivationObservation,
         controller: WMController,
@@ -341,7 +360,9 @@ extension AXEventHandler {
         controller.surfaceReconciler.noteRestackOccurred()
         if observation.shouldActivateWorkspace, observation.shouldConfirmRequest {
             controller.syncMonitorsToNiriEngine()
-            controller.layoutRefreshController.commitWorkspaceTransition(reason: .appActivationTransition)
+            if !animateActivatedWorkspaceSwitch(observation, controller: controller) {
+                controller.layoutRefreshController.commitWorkspaceTransition(reason: .appActivationTransition)
+            }
         }
         if observation.shouldConfirmRequest,
            controller.moveMouseToFocusedWindowEnabled,

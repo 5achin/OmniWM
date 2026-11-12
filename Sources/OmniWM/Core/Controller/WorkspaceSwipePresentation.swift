@@ -365,11 +365,7 @@ extension WorkspaceSwipePresentation {
         let takesFocus = flight.serial == latestSerial || latestGestureMonitorId == monitor.id
         flight.phase = .committing
         previews[monitor.id]?.freezeSource()
-        let settlement =
-            AXFrameSettlement(tokens: Set(controller.workspaceManager.entries(in: flight.destination.id).map(\.token)))
-        flight.settlement = settlement
-        settlement.onChange = { [weak self] in self?.checkSettlement() }
-        controller.axManager.workspaceFrameSettlements.append(settlement)
+        let (placementSubmitted, placementInvalidated) = beginPlacement(flight, controller: controller)
         controller.workspaceNavigationHandler.saveNiriViewportState(for: flight.preparation.source.id)
         guard controller.workspaceManager.setActiveWorkspace(
             flight.destination.id, on: monitor.id, updateInteractionMonitor: takesFocus
@@ -379,14 +375,6 @@ extension WorkspaceSwipePresentation {
             return
         }
         trace(takesFocus ? "committed" : "committed-background", progress: flight.progress)
-        let placementSubmitted: LayoutRefreshController.PostLayoutAction = { [weak self, weak flight] in
-            guard let self, let flight else { return }
-            didSubmitPlacement(flight)
-        }
-        let placementInvalidated: LayoutRefreshController.PostLayoutAction = { [weak self, weak flight] in
-            guard let self, let flight, isCurrent(flight) else { return }
-            cancel(flight, reason: "placement-invalidated")
-        }
         if takesFocus {
             focusOwed = false
             controller.workspaceNavigationHandler.commitWorkspaceTransitionFocusHandoff(
@@ -403,6 +391,25 @@ extension WorkspaceSwipePresentation {
         }
         flight.phase = .waitingForPlacement
         refreshController.stopDisplayLinkIfIdle(for: monitor.displayId)
+    }
+
+    func beginPlacement(
+        _ flight: Flight, controller: WMController
+    ) -> (submitted: LayoutRefreshController.PostLayoutAction, invalidated: LayoutRefreshController.PostLayoutAction) {
+        let settlement =
+            AXFrameSettlement(tokens: Set(controller.workspaceManager.entries(in: flight.destination.id).map(\.token)))
+        flight.settlement = settlement
+        settlement.onChange = { [weak self] in self?.checkSettlement() }
+        controller.axManager.workspaceFrameSettlements.append(settlement)
+        let submitted: LayoutRefreshController.PostLayoutAction = { [weak self, weak flight] in
+            guard let self, let flight else { return }
+            didSubmitPlacement(flight)
+        }
+        let invalidated: LayoutRefreshController.PostLayoutAction = { [weak self, weak flight] in
+            guard let self, let flight, isCurrent(flight) else { return }
+            cancel(flight, reason: "placement-invalidated")
+        }
+        return (submitted, invalidated)
     }
 
     private func keepFocusOffHiddenWorkspace(_ workspaceId: WorkspaceDescriptor.ID) {

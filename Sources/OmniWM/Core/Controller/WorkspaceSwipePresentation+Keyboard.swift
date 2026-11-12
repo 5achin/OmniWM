@@ -56,7 +56,7 @@ extension WorkspaceSwipePresentation {
             trace("keyboard-fallback-preview-unavailable")
             return false
         }
-        return launch(flight, after: predecessor, at: now)
+        return launch(flight, after: predecessor, at: now) { commit($0) }
     }
 
     private func canAnimateSwitch(to targetId: WorkspaceDescriptor.ID, on monitorId: Monitor.ID) -> Bool {
@@ -76,12 +76,16 @@ extension WorkspaceSwipePresentation {
         return show(preview, for: flight)
     }
 
-    private func launch(_ flight: Flight, after predecessor: Flight?, at now: TimeInterval) -> Bool {
+    private func launch(
+        _ flight: Flight,
+        after predecessor: Flight?,
+        at now: TimeInterval,
+        spring: SpringConfig = .niriHorizontalViewMovement,
+        committing: (Flight) -> Void
+    ) -> Bool {
         guard let controller else { return false }
         install(flight, after: predecessor, tracksGesture: false)
-        flight.motion.animateToDestination(
-            startTime: now, config: controller.motionPolicy.snapshot().scaled(.niriHorizontalViewMovement)
-        )
+        flight.motion.animateToDestination(startTime: now, config: controller.motionPolicy.snapshot().scaled(spring))
         flight.phase = .settling
         guard activateDisplayLink(for: flight) else {
             cancel(flight, reason: "display-link-unavailable")
@@ -89,10 +93,57 @@ extension WorkspaceSwipePresentation {
         }
         controller.surfaceReconciler.reconcileNow()
         present(flight, at: now)
-        commit(flight)
+        committing(flight)
         guard isCurrent(flight), flight.committing else { return false }
         prefetchChainTargets(after: flight)
         return true
+    }
+
+    func animateActivatedSwitch(
+        from sourceId: WorkspaceDescriptor.ID,
+        to targetId: WorkspaceDescriptor.ID,
+        on monitorId: Monitor.ID,
+        commitTransition: (
+            _ submitted: @escaping LayoutRefreshController.PostLayoutAction,
+            _ invalidated: @escaping LayoutRefreshController.PostLayoutAction
+        ) -> Void
+    ) -> Bool {
+        guard let controller, sourceId != targetId, flights[monitorId] == nil,
+              canAnimateSwitch(to: targetId, on: monitorId),
+              controller.workspaceManager.monitor(for: sourceId)?.id == monitorId,
+              controller.workspaceManager.activeWorkspaceOrFirst(on: monitorId)?.id == targetId,
+              let monitor = controller.workspaceManager.monitor(byId: monitorId),
+              let source = makeWorkspace(sourceId, monitor: monitor, active: false),
+              let destination = makeWorkspace(targetId, monitor: monitor, active: false)
+        else { return false }
+        let isNext = isAfter(targetId, sourceId, on: monitorId)
+        let preparation = Preparation(
+            monitor: monitor, frame: monitor.visibleFrame, source: source,
+            previous: isNext ? nil : destination, next: isNext ? destination : nil
+        )
+        let now = mediaTimeProvider()
+        let flight = Flight(
+            preparation: preparation, destination: destination,
+            axis: controller.settings.gestures.effectiveWorkspaceSwipeAxis,
+            cumulative: 1, isNext: isNext, timestamp: now, recognitionMovement: nil
+        )
+        flight.isKeyboard = true
+        flight.phase = .committing
+        guard participantsAreCurrent(flight),
+              showKeyboardPreview(previewSurface(controller, for: monitorId), for: flight)
+        else {
+            trace("activation-fallback")
+            return false
+        }
+        flight.phase = .tracking
+        return launch(flight, after: nil, at: now, spring: .workspaceActivation) { flight in
+            flight.phase = .committing
+            previews[monitorId]?.freezeSource()
+            let (submitted, invalidated) = beginPlacement(flight, controller: controller)
+            trace("activation-committed", progress: flight.progress)
+            commitTransition(submitted, invalidated)
+            flight.phase = .waitingForPlacement
+        }
     }
 
     func finishKeyboardMotion(_ flight: Flight) {
